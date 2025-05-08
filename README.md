@@ -1,0 +1,1 @@
+# redmagic7-kernel-build
