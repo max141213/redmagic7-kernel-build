@@ -1,0 +1,57 @@
+name: Kernel Builder for NX679J
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Важно для полной истории git
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y git-core gnupg flex bison build-essential \
+          zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 \
+          lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev \
+          libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig python3
+
+      - name: Clone kernel sources
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_nubia_sm8450.git kernel
+          cd kernel
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+
+      - name: Set up toolchain
+        run: |
+          cd kernel
+          wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/master.tar.gz
+          tar -xf master.tar.gz
+          export CROSS_COMPILE=$(pwd)/bin/aarch64-linux-android-
+          export ARCH=arm64
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          make clean
+          make nubia_sm8450_defconfig
+          echo "CONFIG_HID=y" >> .config
+          echo "CONFIG_USB_CONFIGFS_F_HID=y" >> .config
+          make -j$(nproc) CC="ccache gcc"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build
+          path: |
+            kernel/arch/arm64/boot/Image.gz-dtb
+            kernel/drivers/hid/hid.ko
