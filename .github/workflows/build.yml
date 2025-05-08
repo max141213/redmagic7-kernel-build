@@ -1,0 +1,49 @@
+name: Kernel Builder for NX679J
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y git ccache build-essential libncurses-dev \
+          flex bison libssl-dev libelf-dev python3 dwarves lz4
+
+      - name: Set up toolchain
+        run: |
+          wget -q https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/master.tar.gz
+          tar -xf master.tar.gz
+          echo "CROSS_COMPILE=$(pwd)/bin/aarch64-linux-android-" >> $GITHUB_ENV
+          echo "ARCH=arm64" >> $GITHUB_ENV
+
+      - name: Configure kernel
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_nubia_sm8450.git kernel
+          cd kernel
+          make nubia_sm8450_defconfig
+          echo "CONFIG_HID=y" >> .config
+          echo "CONFIG_USB_CONFIGFS_F_HID=y" >> .config
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          make -j$(nproc) CC="ccache gcc"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build
+          path: |
+            kernel/arch/arm64/boot/Image.gz-dtb
+            kernel/drivers/hid/hid.ko
